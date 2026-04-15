@@ -1,0 +1,34 @@
+```sh
+python -m venv .venv
+.venv\Scripts\activate.bat
+
+python.exe -m pip install --upgrade pip
+
+pip install "fastapi[standard]" uvicorn
+
+python backend/webapi/main.py
+
+cd backend/webapi
+uvicorn main:app --port 8000
+
+pip freeze > requirements.txt
+```
+
+```sh
+cd backend/webapi
+
+# build image
+docker build -t webapi:multistage -f Dockerfile.multistage .
+# run
+docker run --rm -d --name webapi-multistage -p 8000:8000 webapi:multistage
+
+# build image
+docker build -t webapi -f Dockerfile .
+# run
+docker run --rm -d --name webapi -p 8000:8000 webapi
+
+docker images webapi
+# REPOSITORY   TAG          IMAGE ID       CREATED          SIZE
+# webapi       multistage   779d241e047f   28 minutes ago   231MB
+# webapi       latest       e7d8339d4660   31 minutes ago   247MB
+```
