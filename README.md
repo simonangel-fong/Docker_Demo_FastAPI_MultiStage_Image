@@ -3,6 +3,7 @@
 - [Docker Demo: Multi-Stage Image (FastAPI)](#docker-demo-multi-stage-image-fastapi)
   - [Project Overview](#project-overview)
   - [Result](#result)
+    - [FastAPI](#fastapi)
   - [Key Concept: Multi-Stage Build](#key-concept-multi-stage-build)
   - [Key Code Explanation](#key-code-explanation)
     - [Set Environment Variables](#set-environment-variables)
@@ -20,11 +21,15 @@ This project demonstrates the difference between a **single-stage** and a **mult
 
 ## Result
 
-| Build Type     | Tag                 | Size       |
-| -------------- | ------------------- | ---------- |
-| Single-stage   | `webapi:latest`     | 247 MB     |
-| Multi-stage    | `webapi:multistage` | 231 MB     |
-| **Difference** |                     | **−16 MB** |
+### FastAPI
+
+![pic](./assets/images/fastapi_images.png)
+
+| Build Type     | Tag                | Size       |
+| -------------- | ------------------ | ---------- |
+| Multi-stage    | `fastapi:multiple` | 231 MB     |
+| Single-stage   | `fastapi:single`   | 247 MB     |
+| **Difference** |                    | **−16 MB** |
 
 - The **size reduction is modest** here because both images are based on `python:3.12-slim` and both dependencies (`fastapi`, `uvicorn`) ship as **pre-built wheels** — no compilation is needed, so there are no temporary build artifacts to discard.
 - The **multi-stage** pattern delivers **a larger benefit when the builder stage requires heavy tools** (e.g., `gcc`, `Rust`, or `node_modules`) that have no place in the final runtime image.
@@ -89,9 +94,9 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY --from=builder /install /usr/local
 ```
 
-| Part                    | Effect                                                                                           |
-| ----------------------- | ------------------------------------------------------------------------------------------------ |
-| `--from=builder`        | Pulls files from the named builder stage, not from the host filesystem                           |
+| Part                       | Effect                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------ |
+| `--from=builder`           | Pulls files from the named builder stage, not from the host filesystem                           |
 | `COPY /install /usr/local` | Merges the isolated install directory into the standard Python library path of the runtime image |
 
 This is the **core** of the `multi-stage pattern`: only the compiled/installed packages travel to the final image. The builder's base layer, pip cache, and any temporary files are left behind.

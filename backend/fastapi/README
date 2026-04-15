@@ -1,3 +1,7 @@
+# Key Commands: FastAPI
+
+## Init Project
+
 ```sh
 python -m venv .venv
 .venv\Scripts\activate.bat
@@ -6,29 +10,35 @@ python.exe -m pip install --upgrade pip
 
 pip install "fastapi[standard]" uvicorn
 
-python backend/webapi/main.py
+python backend/fastapi/main.py
 
-cd backend/webapi
+cd backend/fastapi
 uvicorn main:app --port 8000
 
 pip freeze > requirements.txt
 ```
 
+## Docker Build and Run
+
 ```sh
-cd backend/webapi
+cd backend/fastapi
 
-# build image
-docker build -t webapi:multistage -f Dockerfile.multistage .
+# build image: single stage
+docker build -t fastapi:single -f Dockerfile .
 # run
-docker run --rm -d --name webapi-multistage -p 8000:8000 webapi:multistage
+docker run --rm -d --name fastapi-single -p 8000:8000 fastapi:single
 
-# build image
-docker build -t webapi -f Dockerfile .
+# build image: multiple stage
+docker build -t fastapi:multiple  -f Dockerfile.multiple .
 # run
-docker run --rm -d --name webapi -p 8000:8000 webapi
+docker run --rm -d --name fastapi-multiple -p 8000:8000 fastapi:multiple
+```
 
-docker images webapi
-# REPOSITORY   TAG          IMAGE ID       CREATED          SIZE
-# webapi       multistage   779d241e047f   28 minutes ago   231MB
-# webapi       latest       e7d8339d4660   31 minutes ago   247MB
+## Image Diff
+
+```sh
+docker images fastapi
+# REPOSITORY   TAG        IMAGE ID       CREATED          SIZE
+# fastapi      multiple   db644a57807e   41 minutes ago   231MB
+# fastapi      single     ca666af50d11   44 minutes ago   247MB
 ```
