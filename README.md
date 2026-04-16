@@ -1,122 +1,101 @@
-# Docker Demo: Multi-Stage Image (FastAPI)
+# Docker Demo: Multi-Stage Build
 
-- [Docker Demo: Multi-Stage Image (FastAPI)](#docker-demo-multi-stage-image-fastapi)
+- [Docker Demo: Multi-Stage Build](#docker-demo-multi-stage-build)
   - [Project Overview](#project-overview)
   - [Result](#result)
+    - [Spring Boot](#spring-boot)
     - [FastAPI](#fastapi)
+    - [Why Spring Boot Gains More](#why-spring-boot-gains-more)
   - [Key Concept: Multi-Stage Build](#key-concept-multi-stage-build)
-  - [Key Code Explanation](#key-code-explanation)
-    - [Set Environment Variables](#set-environment-variables)
-    - [Install Dependencies into an Isolated Directory](#install-dependencies-into-an-isolated-directory)
-    - [Copy Dependencies from the Builder Stage](#copy-dependencies-from-the-builder-stage)
-    - [Why Not Install OS Build Tools](#why-not-install-os-build-tools)
+  - [Key Steps](#key-steps)
 
 ---
 
 ## Project Overview
 
-This project demonstrates the difference between a **single-stage** and a **multi-stage** Docker build using a minimal FastAPI application. The goal is to compare the resulting image sizes and highlight the key techniques that make a multi-stage build leaner.
+- This project demonstrates the benefit of **multi-stage Docker builds** by comparing `single-stage` and `multi-stage` images across two different backend frameworks — **`Spring Boot`** and **`FastAPI`**.
+- The goal is to show **how multi-stage builds reduce final image size** by separating the build environment from the runtime environment, and to illustrate that the size savings depend heavily on how much the build tooling weighs.
 
 ---
 
 ## Result
 
-### FastAPI
+### Spring Boot
 
-![pic](./assets/images/fastapi_images.png)
+| Build Type     | Tag                   | Size        |
+| -------------- | --------------------- | ----------- |
+| Single-stage   | `spring-api:single`   | 897 MB      |
+| Multi-stage    | `spring-api:multiple` | 411 MB      |
+| **Difference** |                       | **−486 MB** |
+
+![pic](./docs/images/springboot_images.png)
+
+---
+
+### FastAPI
 
 | Build Type     | Tag                | Size       |
 | -------------- | ------------------ | ---------- |
-| Multi-stage    | `fastapi:multiple` | 231 MB     |
 | Single-stage   | `fastapi:single`   | 247 MB     |
+| Multi-stage    | `fastapi:multiple` | 231 MB     |
 | **Difference** |                    | **−16 MB** |
 
-- The **size reduction is modest** here because both images are based on `python:3.12-slim` and both dependencies (`fastapi`, `uvicorn`) ship as **pre-built wheels** — no compilation is needed, so there are no temporary build artifacts to discard.
-- The **multi-stage** pattern delivers **a larger benefit when the builder stage requires heavy tools** (e.g., `gcc`, `Rust`, or `node_modules`) that have no place in the final runtime image.
+![pic](./docs/images/fastapi_images.png)
+
+---
+
+### Why Spring Boot Gains More
+
+The size reduction depends on how heavy the build tooling is relative to the runtime.
+
+| Framework   | Builder Image                              | Runtime Image            | What Gets Discarded                        |
+| ----------- | ------------------------------------------ | ------------------------ | ------------------------------------------ |
+| Spring Boot | `maven:3.9.9-eclipse-temurin-17` (~600 MB) | `eclipse-temurin:17-jre` | Full Maven, JDK, source files, build cache |
+| FastAPI     | `python:3.12-slim`                         | `python:3.12-slim`       | pip download cache only                    |
+
+- **Spring Boot**
+  - **the builder stage**: carries **a full `JDK` and the `Maven` build tool** — neither is needed at runtime.
+  - **multi-stage build**: discards both, replacing them with a slim `JRE-only` image.
+  - This accounts for the ~486 MB saving.
+- **FastAPI**
+  - uses the **same slim base image in both stages**
+  - its dependencies (`fastapi`, `uvicorn`) ship as **pre-built wheels with no compilation step**.
+  - There are almost no build artifacts to discard, so the saving is small (~16 MB from the pip download cache).
+
+> The general rule: **the heavier the build tooling, the more multi-stage builds help.**
 
 ---
 
 ## Key Concept: Multi-Stage Build
 
 - `multi-stage build`
-  - uses **multiple `FROM` instructions** in a single `Dockerfile`, each defining a separate stage. Files can be selectively copied from one stage into the next with `COPY --from=<stage>`.
+  - uses **multiple `FROM` instructions** in a single `Dockerfile`.
+  - Each `FROM` starts a new stage with its own base image. Files can be selectively copied from one stage to the next using `COPY --from=<stage>`.
 
+```txt
+Stage 1 — Builder
+├── Start from a full build environment (compiler, package manager, SDK, etc.)
+├── Copy source code
+├── Compile / package the application
+└── (entire stage is discarded after the build)
+
+Stage 2 — Runtime
+├── Start from a lean base image (no build tools)
+├── COPY --from=builder <artifact> → runtime location
+└── Run the application
 ```
-Stage 1 — builder
-├── Base image: python:3.12-slim
-├── Install pip dependencies → /install
-└── (discarded after build)
-
-Stage 2 — runtime
-├── Base image: python:3.12-slim (fresh, no build residue)
-├── COPY --from=builder /install → /usr/local  (packages only)
-└── COPY ./app → /app  (source code only)
-```
-
-- The `builder stage` can **install compilers, headers, and other build-time tools** freely — they never reach the final image.
-- Only the **outputs (installed packages) are carried over**. This keeps the runtime image free of unnecessary tooling.
 
 ---
 
-## Key Code Explanation
+## Key Steps
 
-### Set Environment Variables
+Steps for both `Spring Boot` and `FastAPI`:
 
-```dockerfile
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-```
+| Step                                                     | Purpose                                                             |
+| -------------------------------------------------------- | ------------------------------------------------------------------- |
+| Choose a **builder base** with all required build tools  | Ensures the app compiles or packages correctly                      |
+| **Build the application** inside the builder stage       | Produces a self-contained **artifact** (`.jar`, installed packages) |
+| Choose a minimal **runtime base image**                  | Keeps the final image free of build tooling                         |
+| Copy **only the output artifact** into the runtime stage | Nothing from the builder leaks into the final image                 |
 
-| Variable                    | Effect                                                                                                       |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `PYTHONDONTWRITEBYTECODE=1` | Stops Python from writing `.pyc` / `.pyo` cache files — reduces image clutter                                |
-| `PYTHONUNBUFFERED=1`        | Sends `stdout` / `stderr` straight to the terminal without buffering — essential for readable container logs |
-
----
-
-### Install Dependencies into an Isolated Directory
-
-```dockerfile
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir --prefix=/install -r requirements.txt
-```
-
-| Flag                | Effect                                                                                                                                                |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--no-cache-dir`    | Skips the pip download cache — nothing to discard later, keeps the layer smaller                                                                      |
-| `--prefix=/install` | Installs all packages under `/install` instead of the system Python paths — makes the installed files easy to copy as a single unit in the next stage |
-
----
-
-### Copy Dependencies from the Builder Stage
-
-```dockerfile
-COPY --from=builder /install /usr/local
-```
-
-| Part                       | Effect                                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------------------------ |
-| `--from=builder`           | Pulls files from the named builder stage, not from the host filesystem                           |
-| `COPY /install /usr/local` | Merges the isolated install directory into the standard Python library path of the runtime image |
-
-This is the **core** of the `multi-stage pattern`: only the compiled/installed packages travel to the final image. The builder's base layer, pip cache, and any temporary files are left behind.
-
----
-
-### Why Not Install OS Build Tools
-
-A common pattern seen in Python Dockerfiles is installing `build-essential` to support packages that need to `compile C extensions`:
-
-```dockerfile
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-```
-
-- `build-essential` pulls in the full GCC toolchain (~200 MB). It is only needed when `pip` cannot find a pre-built wheel and must compile from source.
-
-- This project's two dependencies — `fastapi` and `uvicorn[standard]` — both ship pre-built wheels on PyPI for `python3.12` on `linux/amd64`. When pip finds a wheel it simply unpacks it; no C compiler is ever invoked. Adding `build-essential` would contribute ~200 MB to the image for **zero benefit**.
-
-> The general rule: check whether your dependencies have wheels available for your target platform before reaching for `build-essential`. If they do, omit it entirely.
-
----
+> The result is a final image that contains **only what is needed to run** the application — not what was needed to build it.

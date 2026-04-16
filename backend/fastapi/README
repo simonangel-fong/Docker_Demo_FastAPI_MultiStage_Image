@@ -1,4 +1,18 @@
-# Key Commands: FastAPI
+# Demo FastAPI
+
+[Back](../../README.md)
+
+- [Demo FastAPI](#demo-fastapi)
+  - [Init Project](#init-project)
+  - [Docker Build and Run](#docker-build-and-run)
+  - [Image Diff](#image-diff)
+  - [Key Code Explanation](#key-code-explanation)
+    - [Set Environment Variables](#set-environment-variables)
+    - [Install Dependencies into an Isolated Directory](#install-dependencies-into-an-isolated-directory)
+    - [Copy Dependencies from the Builder Stage](#copy-dependencies-from-the-builder-stage)
+    - [Why Not Install OS Build Tools](#why-not-install-os-build-tools)
+
+---
 
 ## Init Project
 
@@ -42,3 +56,68 @@ docker images fastapi
 # fastapi      multiple   db644a57807e   41 minutes ago   231MB
 # fastapi      single     ca666af50d11   44 minutes ago   247MB
 ```
+
+---
+
+## Key Code Explanation
+
+### Set Environment Variables
+
+```dockerfile
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+```
+
+| Variable                    | Effect                                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `PYTHONDONTWRITEBYTECODE=1` | Stops Python from writing `.pyc` / `.pyo` cache files — reduces image clutter                                |
+| `PYTHONUNBUFFERED=1`        | Sends `stdout` / `stderr` straight to the terminal without buffering — essential for readable container logs |
+
+---
+
+### Install Dependencies into an Isolated Directory
+
+```dockerfile
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir --prefix=/install -r requirements.txt
+```
+
+| Flag                | Effect                                                                                                                                                |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--no-cache-dir`    | Skips the pip download cache — nothing to discard later, keeps the layer smaller                                                                      |
+| `--prefix=/install` | Installs all packages under `/install` instead of the system Python paths — makes the installed files easy to copy as a single unit in the next stage |
+
+---
+
+### Copy Dependencies from the Builder Stage
+
+```dockerfile
+COPY --from=builder /install /usr/local
+```
+
+| Part                       | Effect                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------ |
+| `--from=builder`           | Pulls files from the named builder stage, not from the host filesystem                           |
+| `COPY /install /usr/local` | Merges the isolated install directory into the standard Python library path of the runtime image |
+
+This is the **core** of the `multi-stage pattern`: only the compiled/installed packages travel to the final image. The builder's base layer, pip cache, and any temporary files are left behind.
+
+---
+
+### Why Not Install OS Build Tools
+
+A common pattern seen in Python Dockerfiles is installing `build-essential` to support packages that need to `compile C extensions`:
+
+```dockerfile
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+```
+
+- `build-essential` pulls in the full GCC toolchain (~200 MB). It is only needed when `pip` cannot find a pre-built wheel and must compile from source.
+
+- This project's two dependencies — `fastapi` and `uvicorn[standard]` — both ship pre-built wheels on PyPI for `python3.12` on `linux/amd64`. When pip finds a wheel it simply unpacks it; no C compiler is ever invoked. Adding `build-essential` would contribute ~200 MB to the image for **zero benefit**.
+
+> The general rule: check whether your dependencies have wheels available for your target platform before reaching for `build-essential`. If they do, omit it entirely.
+
+---

@@ -1,0 +1,34 @@
+# Demo Spring Boot REST API
+
+[Back](../../README.md)
+
+- [Demo Spring Boot REST API](#demo-spring-boot-rest-api)
+  - [Single Stage](#single-stage)
+  - [Multi-stages](#multi-stages)
+  - [Diff](#diff)
+
+---
+
+## Single Stage
+
+```sh
+cd backend/springboot
+docker build -t spring-api:single -f Dockerfile.single .
+docker run -d --name spring-api-single -p 8080:8080 spring-api:single
+```
+
+## Multi-stages
+
+```sh
+docker build -t spring-api:multiple -f Dockerfile.multiple .
+docker run -d --name spring-api-multiple -p 8080:8080 spring-api:multiple
+```
+
+## Diff
+
+```sh
+docker images spring-api
+# REPOSITORY   TAG        IMAGE ID       CREATED         SIZE
+# spring-api   multiple   dc558028e0d0   2 minutes ago   411MB
+# spring-api   single     c59a6fdadced   4 minutes ago   897MB
+```
