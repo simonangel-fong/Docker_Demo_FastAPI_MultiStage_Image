@@ -7,7 +7,6 @@
     - [FastAPI](#fastapi)
     - [Why Spring Boot Gains More](#why-spring-boot-gains-more)
   - [Key Concept: Multi-Stage Build](#key-concept-multi-stage-build)
-  - [Key Steps](#key-steps)
 
 ---
 
@@ -72,6 +71,15 @@ The size reduction depends on how heavy the build tooling is relative to the run
   - uses **multiple `FROM` instructions** in a single `Dockerfile`.
   - Each `FROM` starts a new stage with its own base image. Files can be selectively copied from one stage to the next using `COPY --from=<stage>`.
 
+- **Key Steps for both `Spring Boot` and `FastAPI`**
+
+| Step                                                     | Purpose                                                             |
+| -------------------------------------------------------- | ------------------------------------------------------------------- |
+| Choose a **builder base** with all required build tools  | Ensures the app compiles or packages correctly                      |
+| **Build the application** inside the builder stage       | Produces a self-contained **artifact** (`.jar`, installed packages) |
+| Choose a minimal **runtime base image**                  | Keeps the final image free of build tooling                         |
+| Copy **only the output artifact** into the runtime stage | Nothing from the builder leaks into the final image                 |
+
 ```txt
 Stage 1 — Builder
 ├── Start from a full build environment (compiler, package manager, SDK, etc.)
@@ -84,18 +92,5 @@ Stage 2 — Runtime
 ├── COPY --from=builder <artifact> → runtime location
 └── Run the application
 ```
-
----
-
-## Key Steps
-
-Steps for both `Spring Boot` and `FastAPI`:
-
-| Step                                                     | Purpose                                                             |
-| -------------------------------------------------------- | ------------------------------------------------------------------- |
-| Choose a **builder base** with all required build tools  | Ensures the app compiles or packages correctly                      |
-| **Build the application** inside the builder stage       | Produces a self-contained **artifact** (`.jar`, installed packages) |
-| Choose a minimal **runtime base image**                  | Keeps the final image free of build tooling                         |
-| Copy **only the output artifact** into the runtime stage | Nothing from the builder leaks into the final image                 |
 
 > The result is a final image that contains **only what is needed to run** the application — not what was needed to build it.
